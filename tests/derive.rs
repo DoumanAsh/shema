@@ -47,6 +47,29 @@ pub(crate) struct AnalyticsEvent<'a> {
 fn should_verify_derive() {
     assert_eq!(AnalyticsEvent::SHEMA_TABLE_NAME, "analytics_event");
 
+    println!("{}", AnalyticsEvent::SHEMA_FIREHOSE_PARQUET_SCHEMA);
+    assert_eq!(
+        AnalyticsEvent::SHEMA_FIREHOSE_PARQUET_SCHEMA,
+        r#"message analytics_event {
+  REQUIRED INT96 client_time;
+  REQUIRED INT96 server_time;
+  OPTIONAL BYTE_ARRAY user_id (UTF8);
+  REQUIRED BYTE_ARRAY session_id (UTF8);
+  OPTIONAL BYTE_ARRAY extra (UTF8);
+  REQUIRED BYTE_ARRAY props (UTF8);
+  REQUIRED BYTE_ARRAY name (UTF8);
+  REQUIRED INT32 byte;
+  REQUIRED INT32 short;
+  REQUIRED INT32 int;
+  REQUIRED INT64 long;
+  REQUIRED INT64 ptr;
+  REQUIRED FLOAT float;
+  REQUIRED DOUBLE double;
+  REQUIRED BOOLEAN boolean;
+  REQUIRED BYTE_ARRAY stroka (UTF8);
+  REQUIRED BYTE_ARRAY array (UTF8);
+}"#);
+
     assert_eq!(
         AnalyticsEvent::SHEMA_FIREHOSE_SCHEMA,
         r#"{

@@ -8,7 +8,7 @@
 //!
 //!## Field parameters
 //!
-//!- `json` - Specifies that field is to be encoded as json object
+//!- `json` - Specifies that field is to be encoded as json object (automatically derived for std's collections)
 //!- `enumeration` - Specifies that field is to be encoded as enumeration (Depending on database, it will be encoded as string or object)
 //!- `index` - Specifies that field is to be indexed by underlying database engine (e.g. to be declared a partition key in AWS glue schema)
 //!- `firehose_date_index` - Specifies field to be used as timestamp within `firehose` schema which will produce `year`, `month` and `day` fields. Requires to be of `timestamp` type. E.g. [time::OffsetDateTime](https://docs.rs/time/0.3.44/time/struct.OffsetDateTime.html)
@@ -18,12 +18,21 @@
 //!
 //!If specified firehose output will expect RFC3339 encoded string as output during serialization
 //!
+//!You should configure HIVE json deserializer with possible RFC3339 formats.
+//!
+//!Terraform Reference: <https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kinesis_firehose_delivery_stream#timestamp_formats-1>
+//!
 //!## Schema output
 //!
 //!Following constants will be declared for affected structs:
 //!
 //!- `SHEMA_TABLE_NAME` - table name in lower case
 //!- `SHEMA_FIREHOSE_SCHEMA` - Firehose glue table schema
+//!- `SHEMA_FIREHOSE_PARQUET_SCHEMA` - Partquet schema compatible with firehose data stream
+//!
+//!### Firehose specifics
+//!
+//!Firehose schema expects flat structure, so any complex struct or array must be serialized as strings
 //!
 //!```rust
 //!mod time {
@@ -78,6 +87,7 @@
 
 mod utils;
 mod firehose;
+mod parquet;
 
 use core::fmt::{self, Write};
 
@@ -333,13 +343,20 @@ fn from_struct(_attributes: &[syn::Attribute], ident: &syn::Ident, generics: &sy
     //impl start
     let _ = writeln!(code, "impl{} {}{} {{", quote::quote!(#impl_gen), ident, quote::quote!(#type_gen #where_clause));
     let _ = writeln!(code, "{TAB}pub const SHEMA_TABLE_NAME: &'static str = \"{table_name}\";");
-    let _ = write!(code, "{TAB}pub const SHEMA_FIREHOSE_SCHEMA: &'static str = r#\"");
 
+    //Firehose schema
+    let _ = write!(code, "{TAB}pub const SHEMA_FIREHOSE_SCHEMA: &'static str = r#\"");
     //json generates valid string always
     unsafe {
         firehose::generate_firehose_schema(&schema, &mut code.as_mut_vec()).expect("to generate firehose schema");
     }
+    let _ = writeln!(code, "\"#;");
 
+    //Firehose's parquet schema
+    let _ = write!(code, "{TAB}pub const SHEMA_FIREHOSE_PARQUET_SCHEMA: &'static str = r#\"");
+    unsafe {
+        parquet::generate_parquet_schema(&schema, &mut code.as_mut_vec()).expect("to generate parquet schema");
+    }
     let _ = writeln!(code, "\"#;");
 
     code.push('}'); //impl
