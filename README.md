@@ -1,0 +1,81 @@
+# shema
+
+[![Rust](https://github.com/DoumanAsh/shema/actions/workflows/rust.yml/badge.svg)](https://github.com/DoumanAsh/shema/actions/workflows/rust.yml)
+[![Crates.io](https://img.shields.io/crates/v/shema.svg)](https://crates.io/crates/shema)
+[![Documentation](https://docs.rs/shema/badge.svg)](https://docs.rs/crate/shema/)
+
+Derive macro to generate database schema code from Rust struct
+
+All parameters are specified via `shema`
+
+## Struct parameters
+
+ None
+
+## Field parameters
+
+- `json` - Specifies that field is to be encoded as json object
+- `enumeration` - Specifies that field is to be encoded as enumeration (Depending on database, it will be encoded as string or object)
+- `index` - Specifies that field is to be indexed by underlying database engine (e.g. to be declared a partition key in AWS glue schema)
+- `firehose_date_index` - Specifies field to be used as timestamp within `firehose` schema which will produce `year`, `month` and `day` fields. Requires to be of `timestamp` type. E.g. [time::OffsetDateTime](https://docs.rs/time/0.3.44/time/struct.OffsetDateTime.html)
+- `rename` - Tells to use different name for the field. Argument MUST be string specified as `rename = "new_name"`
+
+### Firehose date index
+
+If specified firehose output will expect RFC3339 encoded string as output during serialization
+
+## Schema output
+
+Following constants will be declared for affected structs:
+
+- `SHEMA_TABLE_NAME` - table name in lower case
+- `SHEMA_FIREHOSE_SCHEMA` - Firehose glue table schema
+
+```rust
+mod time {
+    pub struct OffsetDateTime;
+}
+mod prost_wkt_types {
+    pub struct Struct;
+}
+
+
+use std::fs;
+use shema::Shema;
+
+//Build context is relative to root of workspace so we point to crate's path
+#[derive(Shema)]
+pub(crate) struct Analytics<'a> {
+    #[shema(index, firehose_date_index)]
+    ///Special field that will be transformed in firehose as year,month,day
+    r#client_time: time::OffsetDateTime,
+    r#server_time: time::OffsetDateTime,
+    r#user_id: Option<String>,
+    #[shema(index)]
+    ///Index key will go into firehose's partition_keys
+    r#client_id: String,
+    #[shema(index)]
+    r#session_id: String,
+    #[shema(json)]
+    r#extras: Option<prost_wkt_types::Struct>,
+    #[shema(json)]
+    r#props: prost_wkt_types::Struct,
+    r#name: String,
+
+    byte: i8,
+    short: i16,
+    int: i32,
+    long: i64,
+    ptr: isize,
+
+    float: f32,
+    double: f64,
+    boolean: bool,
+    #[shema(rename = "stroka")]
+    strka: &'a str,
+
+    array: Vec<String>,
+}
+
+assert_eq!(Analytics::SHEMA_TABLE_NAME, "analytics");
+```

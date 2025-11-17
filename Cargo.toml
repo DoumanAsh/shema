@@ -1,0 +1,35 @@
+[package]
+name = "shema"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85.0"
+repository = "https://github.com/DoumanAsh/shema"
+description = "Schema generation macros"
+keywords = ["schema", "firehose", "aws", "glue"]
+categories = ["encoding"]
+license = "BSL-1.0"
+include = [
+    "src/**",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE"
+]
+
+[lib]
+proc-macro = true
+
+[dependencies.serde]
+version = "1"
+
+[dependencies.serde_derive]
+version = "1"
+
+[dependencies.serde_json]
+version = "1"
+
+[dependencies.syn]
+version = "2"
+features = ["extra-traits"]
+
+[dependencies.quote]
+version = "1"
