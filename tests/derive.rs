@@ -42,6 +42,34 @@ pub(crate) struct AnalyticsEvent<'a> {
 }
 
 #[test]
+fn should_verify_firehose_partition_s3_path() {
+    let event = AnalyticsEvent {
+        client_id: "id".to_owned(),
+        client_time: time::OffsetDateTime::new_utc(time::Date::from_ordinal_date(2020, 31).unwrap(), time::Time::from_hms(1, 2, 3).unwrap()),
+        server_time: time::OffsetDateTime::new_utc(time::Date::from_ordinal_date(2025, 31).unwrap(), time::Time::from_hms(1, 2, 3).unwrap()),
+        user_id: None,
+        session_id: "test_session".to_owned(),
+        extras: None,
+        props: prost_wkt_types::Struct,
+        name: "Whatev".to_owned(),
+
+        byte: 1,
+        short: 2,
+        int: 3,
+        long: 4,
+        ptr: 5,
+
+        float: 5.0,
+        double: 10.0,
+        boolean: false,
+        strka: "test",
+        array: Vec::new(),
+    };
+
+    assert_eq!(event.firehose_s3_path_prefix().to_string(), "year=2020/month=01/day=31/client_id=id/");
+}
+
+#[test]
 fn should_verify_derive() {
     assert_eq!(AnalyticsEvent::SHEMA_TABLE_NAME, "analytics_event");
 

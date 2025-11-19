@@ -438,6 +438,7 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
     }
 
     code.push('}'); //impl
+
     code.parse().expect("valid code")
 }
 

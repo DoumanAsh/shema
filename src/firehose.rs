@@ -100,16 +100,22 @@ pub fn generate_firehose_schema<O: io::Write>(FirehoseInput { schema, index_time
 }
 
 pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schema, index_time_field }: FirehoseInput<'_>, out: &mut O) -> fmt::Result {
-    write!(out, "{TAB}pub fn partition_keys_ref(&self) -> (")?;
+    use fmt::Write;
+
+    let mut reference_type = String::new();
+    reference_type.push('(');
     if index_time_field.is_some() {
-        write!(out, "i32,u8,u8,")?;
+        reference_type.push_str("i32,u8,u8,");
     }
     for field in schema.fields.iter() {
         if field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
-            write!(out, "&{},", field.original_type)?;
+            write!(reference_type, "&'_int {},", field.original_type)?;
         }
     }
-    writeln!(out, ") {{")?;
+    reference_type.push(')');
+
+    writeln!(out, "{TAB}///Returns tuple with reference to all partition keys")?;
+    writeln!(out, "{TAB}pub fn partition_keys_ref<'_int>(&'_int self) -> {reference_type} {{")?;
     write!(out, "{TAB}{TAB}(")?;
     if let Some(time_field) = index_time_field {
         write!(out, "self.{time_field}.year(), self.{time_field}.month() as _, self.{time_field}.day(),", time_field=time_field.name)?;
@@ -122,7 +128,8 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
     writeln!(out, ")")?;
     writeln!(out, "{TAB}}}\n")?;
 
-    write!(out, "{TAB}pub fn partition(&self) -> (")?;
+    writeln!(out, "{TAB}///Returns owned tuple with reference to all partition keys")?;
+    write!(out, "{TAB}pub fn partition_keys(&self) -> (")?;
     if index_time_field.is_some() {
         write!(out, "i32,u8,u8,")?;
     }
@@ -142,6 +149,41 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
         }
     }
     writeln!(out, ")")?;
-    writeln!(out, "{TAB}}}\n")
+    writeln!(out, "{TAB}}}\n")?;
 
+    writeln!(out, "{TAB}///Returns fmt::Display that can be used to write partitioned path prefix for s3 destination")?;
+    writeln!(out, "{TAB}pub fn firehose_s3_path_prefix(&self) -> impl core::fmt::Display + '_ {{")?;
+
+    writeln!(out, "{TAB}{TAB}pub struct DisplayImpl<'_int>({reference_type});")?;
+    writeln!(out, "{TAB}{TAB}impl core::fmt::Display for DisplayImpl<'_> {{")?;
+    writeln!(out, "{TAB}{TAB}{TAB}fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {{")?;
+    write!(out, "{TAB}{TAB}{TAB}{TAB}fmt.write_fmt(format_args!(\"")?;
+    if index_time_field.is_some() {
+        write!(out, "year={{year:04}}/month={{month:02}}/day={{day:02}}/")?;
+    }
+    for field in schema.fields.iter() {
+        if field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
+            write!(out, "{field_name}={{{field_name}}}/", field_name=field.table_field_name())?;
+        }
+    }
+    write!(out, "\",")?;
+
+    if index_time_field.is_some() {
+        write!(out, "year=self.0.0, month=self.0.1 as u8, day=self.0.2,")?;
+    }
+    let mut idx = 3;
+    for field in schema.fields.iter() {
+        if field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
+            write!(out, "{}=self.0.{idx},", field.table_field_name())?;
+            idx += 1;
+        }
+    }
+    writeln!(out, "))")?;
+
+    writeln!(out, "{TAB}{TAB}{TAB}}}\n")?;
+    writeln!(out, "{TAB}{TAB}}}\n")?;
+    writeln!(out, "{TAB}{TAB}DisplayImpl(self.partition_keys_ref())\n")?;
+    writeln!(out, "{TAB}}}\n")?;
+
+    Ok(())
 }
