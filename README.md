@@ -11,6 +11,7 @@ All parameters are specified via `shema`
 ## Struct parameters
 
  - `firehose_schema` - Enables firehose schema generation
+ - `firehose_partition_code` - Enables code generation to access partition information
  - `firehose_parquet_schema` - Enables parquet schema generation similar to AWS Glue's one
 
 ## Field parameters
@@ -31,11 +32,17 @@ Terraform Reference: <https://registry.terraform.io/providers/hashicorp/aws/late
 
 ## Schema output
 
-Following constants will be declared for affected structs:
+### Following constants will be declared for affected structs:
 
 - `SHEMA_TABLE_NAME` - table name in lower case
 - `SHEMA_FIREHOSE_SCHEMA` - Firehose glue table schema. If enabled.
 - `SHEMA_FIREHOSE_PARQUET_SCHEMA` - Partquet schema compatible with firehose data stream. If enabled.
+
+### Following methods will be defined for affected structs
+
+- `firehose_partition_keys_ref` - Returns tuple with references to partition keys
+- `firehose_partition_keys` - Returns tuple with owned values of partition keys
+- `firehose_s3_path_prefix` - Returns `fmt::Display` type that writes full path prefix for S3 destination object
 
 ### Firehose specifics
 
@@ -44,6 +51,17 @@ Firehose schema expects flat structure, so any complex struct or array must be s
 ```rust
 mod time {
     pub struct OffsetDateTime;
+    impl OffsetDateTime {
+        pub fn year(&self) -> i32 {
+            2025
+        }
+        pub fn month(&self) -> i8 {
+            12
+        }
+        pub fn day(&self) -> u8 {
+            30
+        }
+    }
 }
 mod prost_wkt_types {
     pub struct Struct;
@@ -55,6 +73,7 @@ use shema::Shema;
 
 //Build context is relative to root of workspace so we point to crate's path
 #[derive(Shema)]
+#[shema(firehose_schema, firehose_parquet_schema, firehose_partition_code)]
 pub(crate) struct Analytics<'a> {
     #[shema(index, firehose_date_index)]
     ///Special field that will be transformed in firehose as year,month,day

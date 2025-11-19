@@ -7,7 +7,7 @@ use shema::Shema;
 #[allow(unused)]
 //Build context is relative to root of workspace so we point to crate's path
 #[derive(Shema)]
-#[shema(firehose_schema, firehose_parquet_schema)]
+#[shema(firehose_schema, firehose_parquet_schema, firehose_partition_code)]
 pub(crate) struct AnalyticsEvent<'a> {
     #[shema(index)]
     ///Index key will go into firehose's partition_keys

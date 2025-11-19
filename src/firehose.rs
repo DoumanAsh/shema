@@ -115,7 +115,7 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
     reference_type.push(')');
 
     writeln!(out, "{TAB}///Returns tuple with reference to all partition keys")?;
-    writeln!(out, "{TAB}pub fn partition_keys_ref<'_int>(&'_int self) -> {reference_type} {{")?;
+    writeln!(out, "{TAB}pub fn firehose_partition_keys_ref<'_int>(&'_int self) -> {reference_type} {{")?;
     write!(out, "{TAB}{TAB}(")?;
     if let Some(time_field) = index_time_field {
         write!(out, "self.{time_field}.year(), self.{time_field}.month() as _, self.{time_field}.day(),", time_field=time_field.name)?;
@@ -129,7 +129,7 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
     writeln!(out, "{TAB}}}\n")?;
 
     writeln!(out, "{TAB}///Returns owned tuple with reference to all partition keys")?;
-    write!(out, "{TAB}pub fn partition_keys(&self) -> (")?;
+    write!(out, "{TAB}pub fn firehose_partition_keys(&self) -> (")?;
     if index_time_field.is_some() {
         write!(out, "i32,u8,u8,")?;
     }
@@ -182,7 +182,7 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
 
     writeln!(out, "{TAB}{TAB}{TAB}}}\n")?;
     writeln!(out, "{TAB}{TAB}}}\n")?;
-    writeln!(out, "{TAB}{TAB}DisplayImpl(self.partition_keys_ref())\n")?;
+    writeln!(out, "{TAB}{TAB}DisplayImpl(self.firehose_partition_keys_ref())\n")?;
     writeln!(out, "{TAB}}}\n")?;
 
     Ok(())

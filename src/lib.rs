@@ -5,6 +5,7 @@
 //!## Struct parameters
 //!
 //! - `firehose_schema` - Enables firehose schema generation
+//! - `firehose_partition_code` - Enables code generation to access partition information
 //! - `firehose_parquet_schema` - Enables parquet schema generation similar to AWS Glue's one
 //!
 //!## Field parameters
@@ -25,11 +26,17 @@
 //!
 //!## Schema output
 //!
-//!Following constants will be declared for affected structs:
+//!### Following constants will be declared for affected structs:
 //!
 //!- `SHEMA_TABLE_NAME` - table name in lower case
 //!- `SHEMA_FIREHOSE_SCHEMA` - Firehose glue table schema. If enabled.
 //!- `SHEMA_FIREHOSE_PARQUET_SCHEMA` - Partquet schema compatible with firehose data stream. If enabled.
+//!
+//!### Following methods will be defined for affected structs
+//!
+//!- `firehose_partition_keys_ref` - Returns tuple with references to partition keys
+//!- `firehose_partition_keys` - Returns tuple with owned values of partition keys
+//!- `firehose_s3_path_prefix` - Returns `fmt::Display` type that writes full path prefix for S3 destination object
 //!
 //!### Firehose specifics
 //!
@@ -60,7 +67,7 @@
 //!
 //!//Build context is relative to root of workspace so we point to crate's path
 //!#[derive(Shema)]
-//!#[shema(firehose_schema, firehose_parquet_schema)]
+//!#[shema(firehose_schema, firehose_parquet_schema, firehose_partition_code)]
 //!pub(crate) struct Analytics<'a> {
 //!    #[shema(index, firehose_date_index)]
 //!    ///Special field that will be transformed in firehose as year,month,day
@@ -169,6 +176,7 @@ impl Field {
 struct Outputs {
     firehose_schema: bool,
     firehose_parquet_schema: bool,
+    firehose_partition_code: bool,
 }
 
 struct TableSchema {
@@ -262,6 +270,7 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
         outputs: Outputs {
             firehose_schema: false,
             firehose_parquet_schema: false,
+            firehose_partition_code: false,
         }
     };
 
@@ -285,6 +294,8 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
                                     schema.outputs.firehose_schema = true;
                                 } else if value.is_ident("firehose_parquet_schema") {
                                     schema.outputs.firehose_parquet_schema = true;
+                                } else if value.is_ident("firehose_partition_code") {
+                                    schema.outputs.firehose_partition_code = true;
                                 } else {
                                     return compile_error(meta_path, "Unknown attribute passed to shema");
                                 }
@@ -410,22 +421,26 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
     let _ = writeln!(code, "impl{} {}{} {{", quote::quote!(#impl_gen), ident, quote::quote!(#type_gen #where_clause));
     let _ = writeln!(code, "{TAB}pub const SHEMA_TABLE_NAME: &'static str = \"{table_name}\";");
 
-    if schema.outputs.firehose_schema {
+    if schema.outputs.firehose_schema || schema.outputs.firehose_partition_code {
         let schema = firehose::FirehoseInput {
             index_time_field: schema.index_time_field(),
             schema: &schema,
         };
 
-        //Firehose schema
-        let _ = write!(code, "{TAB}pub const SHEMA_FIREHOSE_SCHEMA: &'static str = r#\"");
-        //json generates valid string always
-        unsafe {
-            firehose::generate_firehose_schema(schema, &mut code.as_mut_vec()).expect("to generate firehose schema");
+        if schema.schema.outputs.firehose_schema {
+            //Firehose schema
+            let _ = write!(code, "{TAB}pub const SHEMA_FIREHOSE_SCHEMA: &'static str = r#\"");
+            //json generates valid string always
+            unsafe {
+                firehose::generate_firehose_schema(schema, &mut code.as_mut_vec()).expect("to generate firehose schema");
+            }
+            let _ = writeln!(code, "\"#;");
         }
-        let _ = writeln!(code, "\"#;");
 
-        //Generate partition index reference
-        let _ = firehose::generate_firehose_partition_accessor(schema, &mut code);
+        if schema.schema.outputs.firehose_partition_code {
+            //Generate partition index accessors
+            let _ = firehose::generate_firehose_partition_accessor(schema, &mut code);
+        }
     }
 
     if schema.outputs.firehose_parquet_schema {
