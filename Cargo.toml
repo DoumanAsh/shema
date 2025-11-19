@@ -33,3 +33,7 @@ features = ["extra-traits"]
 
 [dependencies.quote]
 version = "1"
+
+[dev-dependencies.time]
+version = "0.3"
+default-features = false

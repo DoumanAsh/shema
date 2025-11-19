@@ -1,6 +1,3 @@
-mod time {
-    pub struct OffsetDateTime;
-}
 mod prost_wkt_types {
     pub struct Struct;
 }

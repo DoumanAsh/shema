@@ -38,6 +38,17 @@
 //!```rust
 //!mod time {
 //!    pub struct OffsetDateTime;
+//!    impl OffsetDateTime {
+//!        pub fn year(&self) -> i32 {
+//!            2025
+//!        }
+//!        pub fn month(&self) -> i8 {
+//!            12
+//!        }
+//!        pub fn day(&self) -> u8 {
+//!            30
+//!        }
+//!    }
 //!}
 //!mod prost_wkt_types {
 //!    pub struct Struct;
@@ -141,6 +152,7 @@ struct Field {
     //Field's name
     name: String,
     typ: FieldType,
+    original_type: String,
     typ_flags: FieldFlagContainer,
     //Optional documentation on field
     docstring: String,
@@ -169,6 +181,11 @@ impl TableSchema {
     #[inline(always)]
     fn lower_cased_table_name(&self) -> String {
         utils::to_lower_case_by_sep(&self.name, '_')
+    }
+
+    #[inline(always)]
+    fn index_time_field(&self) -> Option<&Field> {
+        self.fields.iter().find(|field| field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex))
     }
 }
 
@@ -350,7 +367,10 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
             }
         } //attr
 
-        let (is_optional, typ) = match &field.ty {
+        let field_ty = &field.ty;
+        let original_type = quote::quote!(#field_ty).to_string();
+
+        let (is_optional, typ) = match field_ty {
             syn::Type::Path(ty) => match extract_type_path(ty, type_override) {
                 Ok(result) => result,
                 Err(error) => return error,
@@ -376,6 +396,7 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
         schema.fields.push(Field {
             name: field_name,
             typ,
+            original_type,
             typ_flags,
             docstring
         })
@@ -390,13 +411,21 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
     let _ = writeln!(code, "{TAB}pub const SHEMA_TABLE_NAME: &'static str = \"{table_name}\";");
 
     if schema.outputs.firehose_schema {
+        let schema = firehose::FirehoseInput {
+            index_time_field: schema.index_time_field(),
+            schema: &schema,
+        };
+
         //Firehose schema
         let _ = write!(code, "{TAB}pub const SHEMA_FIREHOSE_SCHEMA: &'static str = r#\"");
         //json generates valid string always
         unsafe {
-            firehose::generate_firehose_schema(&schema, &mut code.as_mut_vec()).expect("to generate firehose schema");
+            firehose::generate_firehose_schema(schema, &mut code.as_mut_vec()).expect("to generate firehose schema");
         }
         let _ = writeln!(code, "\"#;");
+
+        //Generate partition index reference
+        let _ = firehose::generate_firehose_partition_accessor(schema, &mut code);
     }
 
     if schema.outputs.firehose_parquet_schema {

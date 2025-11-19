@@ -1,7 +1,7 @@
-use std::io;
+use std::{fmt, io};
 use std::borrow::Cow;
 
-use crate::{TableSchema, FieldType, FieldFlag};
+use crate::{TAB, TableSchema, Field, FieldType, FieldFlag};
 
 impl FieldType {
     #[inline(always)]
@@ -17,10 +17,16 @@ impl FieldType {
             Self::String => "string",
             Self::Boolean => "boolean",
             Self::TimestampZ => "timestamp",
-            //Encode all arrays/objects as strings
+            //Enout all arrays/objects as strings
             Self::Array | Self::Object | Self::Enum => "string",
         }
     }
+}
+
+#[derive(Copy, Clone)]
+pub struct FirehoseInput<'a> {
+    pub schema: &'a TableSchema,
+    pub index_time_field: Option<&'a Field>
 }
 
 #[derive(serde_derive::Serialize)]
@@ -40,14 +46,13 @@ struct FirehoseSchema<'a> {
     columns: Vec<FirehoseType<'a>>,
 }
 
-pub fn generate_firehose_schema<O: io::Write>(schema: &TableSchema, out: &mut O) -> io::Result<()> {
+pub fn generate_firehose_schema<O: io::Write>(FirehoseInput { schema, index_time_field }: FirehoseInput<'_>, out: &mut O) -> io::Result<()> {
     let mut out_schema = FirehoseSchema {
         name: schema.lower_cased_table_name(),
         partition_keys: Vec::new(),
         columns: Vec::new(),
     };
 
-    let index_time_field = schema.fields.iter().find(|field| field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex));
     if let Some(field) =  index_time_field {
         let name = field.table_field_name();
         let comment = format!("Extracted from '{name}'");
@@ -92,4 +97,51 @@ pub fn generate_firehose_schema<O: io::Write>(schema: &TableSchema, out: &mut O)
 
     serde_json::to_writer_pretty(&mut *out, &out_schema).map_err(|error| io::Error::other(error))?;
     out.flush()
+}
+
+pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schema, index_time_field }: FirehoseInput<'_>, out: &mut O) -> fmt::Result {
+    write!(out, "{TAB}pub fn partition_keys_ref(&self) -> (")?;
+    if index_time_field.is_some() {
+        write!(out, "i32,u8,u8,")?;
+    }
+    for field in schema.fields.iter() {
+        if field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
+            write!(out, "&{},", field.original_type)?;
+        }
+    }
+    writeln!(out, ") {{")?;
+    write!(out, "{TAB}{TAB}(")?;
+    if let Some(time_field) = index_time_field {
+        write!(out, "self.{time_field}.year(), self.{time_field}.month() as _, self.{time_field}.day(),", time_field=time_field.name)?;
+    }
+    for field in schema.fields.iter() {
+        if field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
+            write!(out, "&self.{},", field.name)?;
+        }
+    }
+    writeln!(out, ")")?;
+    writeln!(out, "{TAB}}}\n")?;
+
+    write!(out, "{TAB}pub fn partition(&self) -> (")?;
+    if index_time_field.is_some() {
+        write!(out, "i32,u8,u8,")?;
+    }
+    for field in schema.fields.iter() {
+        if field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
+            write!(out, "{},", field.original_type)?;
+        }
+    }
+    writeln!(out, ") {{")?;
+    write!(out, "{TAB}{TAB}(")?;
+    if let Some(time_field) = index_time_field {
+        write!(out, "self.{time_field}.year(), self.{time_field}.month() as _, self.{time_field}.day(),", time_field=time_field.name)?;
+    }
+    for field in schema.fields.iter() {
+        if field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
+            write!(out, "self.{}.clone(),", field.name)?;
+        }
+    }
+    writeln!(out, ")")?;
+    writeln!(out, "{TAB}}}\n")
+
 }
