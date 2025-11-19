@@ -10,7 +10,8 @@ All parameters are specified via `shema`
 
 ## Struct parameters
 
- None
+ - `firehose_schema` - Enables firehose schema generation
+ - `firehose_parquet_schema` - Enables parquet schema generation similar to AWS Glue's one
 
 ## Field parameters
 
@@ -33,8 +34,8 @@ Terraform Reference: <https://registry.terraform.io/providers/hashicorp/aws/late
 Following constants will be declared for affected structs:
 
 - `SHEMA_TABLE_NAME` - table name in lower case
-- `SHEMA_FIREHOSE_SCHEMA` - Firehose glue table schema
-- `SHEMA_FIREHOSE_PARQUET_SCHEMA` - Partquet schema compatible with firehose data stream
+- `SHEMA_FIREHOSE_SCHEMA` - Firehose glue table schema. If enabled.
+- `SHEMA_FIREHOSE_PARQUET_SCHEMA` - Partquet schema compatible with firehose data stream. If enabled.
 
 ### Firehose specifics
 

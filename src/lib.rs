@@ -4,7 +4,8 @@
 //!
 //!## Struct parameters
 //!
-//! None
+//! - `firehose_schema` - Enables firehose schema generation
+//! - `firehose_parquet_schema` - Enables parquet schema generation similar to AWS Glue's one
 //!
 //!## Field parameters
 //!
@@ -27,8 +28,8 @@
 //!Following constants will be declared for affected structs:
 //!
 //!- `SHEMA_TABLE_NAME` - table name in lower case
-//!- `SHEMA_FIREHOSE_SCHEMA` - Firehose glue table schema
-//!- `SHEMA_FIREHOSE_PARQUET_SCHEMA` - Partquet schema compatible with firehose data stream
+//!- `SHEMA_FIREHOSE_SCHEMA` - Firehose glue table schema. If enabled.
+//!- `SHEMA_FIREHOSE_PARQUET_SCHEMA` - Partquet schema compatible with firehose data stream. If enabled.
 //!
 //!### Firehose specifics
 //!
@@ -48,6 +49,7 @@
 //!
 //!//Build context is relative to root of workspace so we point to crate's path
 //!#[derive(Shema)]
+//!#[shema(firehose_schema, firehose_parquet_schema)]
 //!pub(crate) struct Analytics<'a> {
 //!    #[shema(index, firehose_date_index)]
 //!    ///Special field that will be transformed in firehose as year,month,day
@@ -152,9 +154,15 @@ impl Field {
     }
 }
 
+struct Outputs {
+    firehose_schema: bool,
+    firehose_parquet_schema: bool,
+}
+
 struct TableSchema {
     name: String,
     fields: Vec<Field>,
+    outputs: Outputs,
 }
 
 impl TableSchema {
@@ -230,11 +238,48 @@ fn extract_type_path(ty: &syn::TypePath, type_override: Option<FieldType>) -> Re
     }
 }
 
-fn from_struct(_attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn::Generics, payload: &syn::DataStruct) -> TokenStream {
+fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn::Generics, payload: &syn::DataStruct) -> TokenStream {
     let mut schema = TableSchema {
         name: ident.to_string(),
         fields: Vec::new(),
+        outputs: Outputs {
+            firehose_schema: false,
+            firehose_parquet_schema: false,
+        }
     };
+
+    for attr in attributes.iter() {
+        match &attr.meta {
+            syn::Meta::List(value) => {
+                if value.path.is_ident("shema") {
+                    let nested = attr.parse_args_with(
+                        syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+                    );
+                    let nested = match nested {
+                        Ok(nested) => nested,
+                        Err(error) => return compile_error(&value, format_args!("shema input is not valid: {error}")),
+                    };
+
+                    for meta in nested {
+                        let meta_path = meta.path();
+                        match &meta {
+                            syn::Meta::Path(value) => {
+                                if value.is_ident("firehose_schema") {
+                                    schema.outputs.firehose_schema = true;
+                                } else if value.is_ident("firehose_parquet_schema") {
+                                    schema.outputs.firehose_parquet_schema = true;
+                                } else {
+                                    return compile_error(meta_path, "Unknown attribute passed to shema");
+                                }
+                            }
+                            invalid => return compile_error(invalid, format_args!("Unknown attribute passed to shema: {:?}", invalid)),
+                        }
+                    }
+                }
+            }
+            _ => (),
+        }
+    }
 
     for field in payload.fields.iter() {
         let mut field_name = match field.ident.as_ref() {
@@ -344,20 +389,24 @@ fn from_struct(_attributes: &[syn::Attribute], ident: &syn::Ident, generics: &sy
     let _ = writeln!(code, "impl{} {}{} {{", quote::quote!(#impl_gen), ident, quote::quote!(#type_gen #where_clause));
     let _ = writeln!(code, "{TAB}pub const SHEMA_TABLE_NAME: &'static str = \"{table_name}\";");
 
-    //Firehose schema
-    let _ = write!(code, "{TAB}pub const SHEMA_FIREHOSE_SCHEMA: &'static str = r#\"");
-    //json generates valid string always
-    unsafe {
-        firehose::generate_firehose_schema(&schema, &mut code.as_mut_vec()).expect("to generate firehose schema");
+    if schema.outputs.firehose_schema {
+        //Firehose schema
+        let _ = write!(code, "{TAB}pub const SHEMA_FIREHOSE_SCHEMA: &'static str = r#\"");
+        //json generates valid string always
+        unsafe {
+            firehose::generate_firehose_schema(&schema, &mut code.as_mut_vec()).expect("to generate firehose schema");
+        }
+        let _ = writeln!(code, "\"#;");
     }
-    let _ = writeln!(code, "\"#;");
 
-    //Firehose's parquet schema
-    let _ = write!(code, "{TAB}pub const SHEMA_FIREHOSE_PARQUET_SCHEMA: &'static str = r#\"");
-    unsafe {
-        parquet::generate_parquet_schema(&schema, &mut code.as_mut_vec()).expect("to generate parquet schema");
+    if schema.outputs.firehose_parquet_schema {
+        //Firehose's parquet schema
+        let _ = write!(code, "{TAB}pub const SHEMA_FIREHOSE_PARQUET_SCHEMA: &'static str = r#\"");
+        unsafe {
+            parquet::generate_parquet_schema(&schema, &mut code.as_mut_vec()).expect("to generate parquet schema");
+        }
+        let _ = writeln!(code, "\"#;");
     }
-    let _ = writeln!(code, "\"#;");
 
     code.push('}'); //impl
     code.parse().expect("valid code")
