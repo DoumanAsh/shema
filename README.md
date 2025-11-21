@@ -62,7 +62,6 @@ mod prost_wkt_types {
 use std::fs;
 use shema::Shema;
 
-//Build context is relative to root of workspace so we point to crate's path
 #[derive(Shema)]
 #[shema(firehose_schema, firehose_parquet_schema, firehose_partition_code)]
 pub(crate) struct Analytics<'a> {
