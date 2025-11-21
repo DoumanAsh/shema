@@ -1,6 +1,6 @@
 [package]
 name = "shema"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85.0"
 repository = "https://github.com/DoumanAsh/shema"
@@ -36,4 +36,8 @@ version = "1"
 
 [dev-dependencies.time]
 version = "0.3"
+default-features = false
+
+[dev-dependencies.parquet]
+version = "57"
 default-features = false

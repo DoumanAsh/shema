@@ -118,11 +118,11 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
     writeln!(out, "{TAB}pub fn firehose_partition_keys_ref<'_int>(&'_int self) -> {reference_type} {{")?;
     write!(out, "{TAB}{TAB}(")?;
     if let Some(time_field) = index_time_field {
-        write!(out, "self.{time_field}.year(), self.{time_field}.month() as _, self.{time_field}.day(),", time_field=time_field.name)?;
+        write!(out, "self.{time_field}.year(), self.{time_field}.month() as _, self.{time_field}.day(),", time_field=time_field.original_name)?;
     }
     for field in schema.fields.iter() {
         if field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
-            write!(out, "&self.{},", field.name)?;
+            write!(out, "&self.{},", field.original_name)?;
         }
     }
     writeln!(out, ")")?;
@@ -141,16 +141,30 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
     writeln!(out, ") {{")?;
     write!(out, "{TAB}{TAB}(")?;
     if let Some(time_field) = index_time_field {
-        write!(out, "self.{time_field}.year(), self.{time_field}.month() as _, self.{time_field}.day(),", time_field=time_field.name)?;
+        write!(out, "self.{time_field}.year(), self.{time_field}.month() as _, self.{time_field}.day(),", time_field=time_field.original_name)?;
     }
     for field in schema.fields.iter() {
         if field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
-            write!(out, "self.{}.clone(),", field.name)?;
+            write!(out, "self.{}.clone(),", field.original_name)?;
         }
     }
     writeln!(out, ")")?;
     writeln!(out, "{TAB}}}\n")?;
 
+    //Validate partitions are valid
+    writeln!(out, "{TAB}///Returns whether partitions are valid. Specifically it checks if there are no empty partitions")?;
+    writeln!(out, "{TAB}pub fn is_firehose_s3_path_prefix_valid(&self) -> bool {{")?;
+
+    for field in schema.fields.iter() {
+        if field.typ.is_string_type() && field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
+            write!(out, "{TAB}{TAB}if self.{}.trim().is_empty() {{ return false; }}\n", field.original_name)?;
+        }
+    }
+
+    write!(out, "{TAB}{TAB}true\n")?;
+    writeln!(out, "{TAB}}}\n")?;
+
+    //Firehose compatible s3 path
     writeln!(out, "{TAB}///Returns fmt::Display that can be used to write partitioned path prefix for s3 destination")?;
     writeln!(out, "{TAB}pub fn firehose_s3_path_prefix(&self) -> impl core::fmt::Display + '_ {{")?;
 

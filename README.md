@@ -13,6 +13,7 @@ All parameters are specified via `shema`
  - `firehose_schema` - Enables firehose schema generation
  - `firehose_partition_code` - Enables code generation to access partition information
  - `firehose_parquet_schema` - Enables parquet schema generation similar to AWS Glue's one
+ - `parquet_code` - Specifies to generate parquet code to read/write strut per schema. This requires `parquet` and `serde_json` crates to be added as dependencies
 
 ## Field parameters
 
@@ -43,30 +44,16 @@ Terraform Reference: <https://registry.terraform.io/providers/hashicorp/aws/late
 - `firehose_partition_keys_ref` - Returns tuple with references to partition keys
 - `firehose_partition_keys` - Returns tuple with owned values of partition keys
 - `firehose_s3_path_prefix` - Returns `fmt::Display` type that writes full path prefix for S3 destination object
+- `is_firehose_s3_path_prefix_valid` - Returns `true` if `firehose_s3_path_prefix` is valid or not (i.e. no string is empty among partitions)
 
 ### Firehose specifics
 
 Firehose schema expects flat structure, so any complex struct or array must be serialized as strings
 
 ```rust
-mod time {
-    pub struct OffsetDateTime;
-    impl OffsetDateTime {
-        pub fn year(&self) -> i32 {
-            2025
-        }
-        pub fn month(&self) -> i8 {
-            12
-        }
-        pub fn day(&self) -> u8 {
-            30
-        }
-    }
-}
 mod prost_wkt_types {
     pub struct Struct;
 }
-
 
 use std::fs;
 use shema::Shema;

@@ -7,6 +7,7 @@
 //! - `firehose_schema` - Enables firehose schema generation
 //! - `firehose_partition_code` - Enables code generation to access partition information
 //! - `firehose_parquet_schema` - Enables parquet schema generation similar to AWS Glue's one
+//! - `parquet_code` - Specifies to generate parquet code to read/write strut per schema. This requires `parquet` and `serde_json` crates to be added as dependencies
 //!
 //!## Field parameters
 //!
@@ -37,30 +38,16 @@
 //!- `firehose_partition_keys_ref` - Returns tuple with references to partition keys
 //!- `firehose_partition_keys` - Returns tuple with owned values of partition keys
 //!- `firehose_s3_path_prefix` - Returns `fmt::Display` type that writes full path prefix for S3 destination object
+//!- `is_firehose_s3_path_prefix_valid` - Returns `true` if `firehose_s3_path_prefix` is valid or not (i.e. no string is empty among partitions)
 //!
 //!### Firehose specifics
 //!
 //!Firehose schema expects flat structure, so any complex struct or array must be serialized as strings
 //!
 //!```rust
-//!mod time {
-//!    pub struct OffsetDateTime;
-//!    impl OffsetDateTime {
-//!        pub fn year(&self) -> i32 {
-//!            2025
-//!        }
-//!        pub fn month(&self) -> i8 {
-//!            12
-//!        }
-//!        pub fn day(&self) -> u8 {
-//!            30
-//!        }
-//!    }
-//!}
 //!mod prost_wkt_types {
 //!    pub struct Struct;
 //!}
-//!
 //!
 //!use std::fs;
 //!use shema::Shema;
@@ -132,6 +119,13 @@ enum FieldType {
     Enum,
 }
 
+impl FieldType {
+    #[inline]
+    pub const fn is_string_type(&self) -> bool {
+        matches!(self, Self::String)
+    }
+}
+
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum FieldFlag {
@@ -159,6 +153,7 @@ struct Field {
     //Field's name
     name: String,
     typ: FieldType,
+    original_name: String,
     original_type: String,
     typ_flags: FieldFlagContainer,
     //Optional documentation on field
@@ -177,6 +172,7 @@ struct Outputs {
     firehose_schema: bool,
     firehose_parquet_schema: bool,
     firehose_partition_code: bool,
+    parquet_code: bool,
 }
 
 struct TableSchema {
@@ -271,6 +267,7 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
             firehose_schema: false,
             firehose_parquet_schema: false,
             firehose_partition_code: false,
+            parquet_code: false,
         }
     };
 
@@ -296,6 +293,8 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
                                     schema.outputs.firehose_parquet_schema = true;
                                 } else if value.is_ident("firehose_partition_code") {
                                     schema.outputs.firehose_partition_code = true;
+                                } else if value.is_ident("parquet_code") {
+                                    schema.outputs.parquet_code = true;
                                 } else {
                                     return compile_error(meta_path, "Unknown attribute passed to shema");
                                 }
@@ -310,11 +309,12 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
     }
 
     for field in payload.fields.iter() {
-        let mut field_name = match field.ident.as_ref() {
+        let original_name = match field.ident.as_ref() {
             Some(ident) => ident.to_string(),
             None => return compile_error(field, "Field is missing name"),
         };
 
+        let mut field_name = None;
         let mut docstring = String::new();
         let mut typ_flags = FieldFlagContainer(0);
         let mut type_override = None;
@@ -366,7 +366,7 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
                                     return compile_error(literal, "'rename' requires non-empty string");
                                 }
 
-                                field_name = new_name.to_owned();
+                                field_name = Some(new_name.to_owned());
                             } else {
                                 return compile_error(meta_path, "Unexpected name value attribute specified for '{ATTR_NAME}'. Allowed: rename");
                             },
@@ -405,8 +405,9 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
         }
 
         schema.fields.push(Field {
-            name: field_name,
+            name: field_name.unwrap_or_else(|| original_name.clone()),
             typ,
+            original_name,
             original_type,
             typ_flags,
             docstring
@@ -454,6 +455,19 @@ fn from_struct(attributes: &[syn::Attribute], ident: &syn::Ident, generics: &syn
 
     code.push('}'); //impl
 
+    if schema.outputs.parquet_code {
+        let _ = writeln!(
+            code,
+            "\nimpl{} parquet::record::RecordWriter<{ident}{generics}> for &[{ident}{generics}] {{",
+            quote::quote!(#impl_gen),
+            ident = ident,
+            generics = quote::quote!(#type_gen #where_clause)
+        );
+
+        parquet::generate_parquet_writer_interface_code(&schema, &mut code)
+            .expect("to generate parquet code");
+        let _ = writeln!(code, "}}");
+    }
     code.parse().expect("valid code")
 }
 

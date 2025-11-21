@@ -1,5 +1,5 @@
 mod prost_wkt_types {
-    pub struct Struct;
+    pub type Struct = std::collections::HashMap<String, String>;
 }
 
 use shema::Shema;
@@ -7,7 +7,7 @@ use shema::Shema;
 #[allow(unused)]
 //Build context is relative to root of workspace so we point to crate's path
 #[derive(Shema)]
-#[shema(firehose_schema, firehose_parquet_schema, firehose_partition_code)]
+#[shema(firehose_schema, firehose_parquet_schema, firehose_partition_code, parquet_code)]
 pub(crate) struct AnalyticsEvent<'a> {
     #[shema(index)]
     ///Index key will go into firehose's partition_keys
@@ -42,15 +42,15 @@ pub(crate) struct AnalyticsEvent<'a> {
 }
 
 #[test]
-fn should_verify_firehose_partition_s3_path() {
-    let event = AnalyticsEvent {
+fn should_verify_firehose_partition_and_serialization() {
+    let mut event = AnalyticsEvent {
         client_id: "id".to_owned(),
         client_time: time::OffsetDateTime::new_utc(time::Date::from_ordinal_date(2020, 31).unwrap(), time::Time::from_hms(1, 2, 3).unwrap()),
         server_time: time::OffsetDateTime::new_utc(time::Date::from_ordinal_date(2025, 31).unwrap(), time::Time::from_hms(1, 2, 3).unwrap()),
         user_id: None,
         session_id: "test_session".to_owned(),
         extras: None,
-        props: prost_wkt_types::Struct,
+        props: prost_wkt_types::Struct::new(),
         name: "Whatev".to_owned(),
 
         byte: 1,
@@ -67,6 +67,29 @@ fn should_verify_firehose_partition_s3_path() {
     };
 
     assert_eq!(event.firehose_s3_path_prefix().to_string(), "year=2020/month=01/day=31/client_id=id/");
+    assert!(event.is_firehose_s3_path_prefix_valid());
+
+    event.client_id.clear();
+
+    assert_eq!(event.firehose_s3_path_prefix().to_string(), "year=2020/month=01/day=31/client_id=/");
+    assert!(!event.is_firehose_s3_path_prefix_valid());
+
+    //Verify it is always writable
+    let events = [event];
+    let props = parquet::file::properties::WriterProperties::builder()
+            .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_1_0)
+            .set_statistics_enabled(parquet::file::properties::EnabledStatistics::None)
+            .build();
+    let schema = parquet::record::RecordWriter::schema(&events.as_slice()).expect("to get schema");
+
+    let mut buffer = Vec::new();
+    let mut writer = parquet::file::writer::SerializedFileWriter::new(&mut buffer, schema, props.into()).expect("to create writer");
+    let mut row_group = writer.next_row_group().expect("to have row group");
+    parquet::record::RecordWriter::write_to_row_group(&events.as_slice(), &mut row_group).expect("to write schema");
+
+    let metadata = row_group.close().expect("to finalize rows");
+    assert_eq!(metadata.num_rows(), 1);
+    writer.close().expect("to finalize parquet");
 }
 
 #[test]
