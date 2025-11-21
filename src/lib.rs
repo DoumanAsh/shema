@@ -7,7 +7,7 @@
 //! - `firehose_schema` - Enables firehose schema generation
 //! - `firehose_partition_code` - Enables code generation to access partition information
 //! - `firehose_parquet_schema` - Enables parquet schema generation similar to AWS Glue's one
-//! - `parquet_code` - Specifies to generate parquet code to read/write strut per schema. This requires `parquet` and `serde_json` crates to be added as dependencies
+//! - `parquet_code` - Specifies to generate parquet code to write struct per schema. This requires `parquet` and `serde_json` crates to be added as dependencies
 //!
 //!## Field parameters
 //!
@@ -39,6 +39,10 @@
 //!- `firehose_partition_keys` - Returns tuple with owned values of partition keys
 //!- `firehose_s3_path_prefix` - Returns `fmt::Display` type that writes full path prefix for S3 destination object
 //!- `is_firehose_s3_path_prefix_valid` - Returns `true` if `firehose_s3_path_prefix` is valid or not (i.e. no string is empty among partitions)
+//!
+//!### Following [parquet](https://crates.io/crates/parquet)  crate traits are implemented:
+//!
+//!- [RecordWriter](https://docs.rs/parquet/57.0.0/parquet/record/trait.RecordWriter.html) - Enables write via [SerializedFileWriter](https://docs.rs/parquet/latest/parquet/file/writer/struct.SerializedFileWriter.html)
 //!
 //!### Firehose specifics
 //!
