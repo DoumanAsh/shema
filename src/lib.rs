@@ -35,10 +35,10 @@
 //!
 //!### Following methods will be defined for affected structs
 //!
-//!- `firehose_partition_keys_ref` - Returns tuple with references to partition keys
-//!- `firehose_partition_keys` - Returns tuple with owned values of partition keys
-//!- `firehose_s3_path_prefix` - Returns `fmt::Display` type that writes full path prefix for S3 destination object
-//!- `is_firehose_s3_path_prefix_valid` - Returns `true` if `firehose_s3_path_prefix` is valid or not (i.e. no string is empty among partitions)
+//!- `shema_firehose_partition_keys_ref` - Returns tuple with references to partition keys
+//!- `shema_firehose_partition_keys` - Returns tuple with owned values of partition keys
+//!- `shema_firehose_s3_path_prefix` - Returns `fmt::Display` type that writes full path prefix for S3 destination object
+//!- `shema_is_firehose_s3_path_prefix_valid` - Returns `true` if `shema_firehose_s3_path_prefix` is valid or not (i.e. no string is empty among partitions)
 //!
 //!### Following [parquet](https://crates.io/crates/parquet)  crate traits are implemented:
 //!

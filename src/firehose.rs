@@ -115,7 +115,7 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
     reference_type.push(')');
 
     writeln!(out, "{TAB}///Returns tuple with reference to all partition keys")?;
-    writeln!(out, "{TAB}pub fn firehose_partition_keys_ref<'_int>(&'_int self) -> {reference_type} {{")?;
+    writeln!(out, "{TAB}pub fn shema_firehose_partition_keys_ref<'_int>(&'_int self) -> {reference_type} {{")?;
     write!(out, "{TAB}{TAB}(")?;
     if let Some(time_field) = index_time_field {
         write!(out, "self.{time_field}.year(), self.{time_field}.month() as _, self.{time_field}.day(),", time_field=time_field.original_name)?;
@@ -129,7 +129,7 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
     writeln!(out, "{TAB}}}\n")?;
 
     writeln!(out, "{TAB}///Returns owned tuple with reference to all partition keys")?;
-    write!(out, "{TAB}pub fn firehose_partition_keys(&self) -> (")?;
+    write!(out, "{TAB}pub fn shema_firehose_partition_keys(&self) -> (")?;
     if index_time_field.is_some() {
         write!(out, "i32,u8,u8,")?;
     }
@@ -153,7 +153,7 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
 
     //Validate partitions are valid
     writeln!(out, "{TAB}///Returns whether partitions are valid. Specifically it checks if there are no empty partitions")?;
-    writeln!(out, "{TAB}pub fn is_firehose_s3_path_prefix_valid(&self) -> bool {{")?;
+    writeln!(out, "{TAB}pub fn shema_is_firehose_s3_path_prefix_valid(&self) -> bool {{")?;
 
     for field in schema.fields.iter() {
         if field.typ.is_string_type() && field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
@@ -166,7 +166,7 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
 
     //Firehose compatible s3 path
     writeln!(out, "{TAB}///Returns fmt::Display that can be used to write partitioned path prefix for s3 destination")?;
-    writeln!(out, "{TAB}pub fn firehose_s3_path_prefix(&self) -> impl core::fmt::Display + '_ {{")?;
+    writeln!(out, "{TAB}pub fn shema_firehose_s3_path_prefix(&self) -> impl core::fmt::Display + '_ {{")?;
 
     writeln!(out, "{TAB}{TAB}pub struct DisplayImpl<'_int>({reference_type});")?;
     writeln!(out, "{TAB}{TAB}impl core::fmt::Display for DisplayImpl<'_> {{")?;
@@ -196,7 +196,7 @@ pub fn generate_firehose_partition_accessor<O: fmt::Write>(FirehoseInput { schem
 
     writeln!(out, "{TAB}{TAB}{TAB}}}\n")?;
     writeln!(out, "{TAB}{TAB}}}\n")?;
-    writeln!(out, "{TAB}{TAB}DisplayImpl(self.firehose_partition_keys_ref())\n")?;
+    writeln!(out, "{TAB}{TAB}DisplayImpl(self.shema_firehose_partition_keys_ref())\n")?;
     writeln!(out, "{TAB}}}\n")?;
 
     Ok(())

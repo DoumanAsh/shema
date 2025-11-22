@@ -66,13 +66,13 @@ fn should_verify_firehose_partition_and_serialization() {
         array: Vec::new(),
     };
 
-    assert_eq!(event.firehose_s3_path_prefix().to_string(), "year=2020/month=01/day=31/client_id=id/");
-    assert!(event.is_firehose_s3_path_prefix_valid());
+    assert_eq!(event.shema_firehose_s3_path_prefix().to_string(), "year=2020/month=01/day=31/client_id=id/");
+    assert!(event.shema_is_firehose_s3_path_prefix_valid());
 
     event.client_id.clear();
 
-    assert_eq!(event.firehose_s3_path_prefix().to_string(), "year=2020/month=01/day=31/client_id=/");
-    assert!(!event.is_firehose_s3_path_prefix_valid());
+    assert_eq!(event.shema_firehose_s3_path_prefix().to_string(), "year=2020/month=01/day=31/client_id=/");
+    assert!(!event.shema_is_firehose_s3_path_prefix_valid());
 
     //Verify it is always writable
     let events = [event];
