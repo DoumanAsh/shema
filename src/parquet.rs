@@ -216,6 +216,40 @@ impl fmt::Display for ParquetFieldWriter<'_> {
     }
 }
 
+struct ParquetFieldSchema<'a>(&'a Field);
+
+impl fmt::Display for ParquetFieldSchema<'_> {
+    #[inline]
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const LOGICAL_NONE: &str = "None";
+        const LOGICAL_STRING: &str = "Some(::parquet::basic::LogicalType::String)";
+
+        let (logical_type, physical_type) = match self.0.typ {
+            FieldType::Byte => ("Some(::parquet::basic::LogicalType::Integer { bit_width: 8, is_signed: true })", "INT32"),
+            FieldType::Short => ("Some(::parquet::basic::LogicalType::Integer { bit_width: 16, is_signed: true })", "INT32"),
+            FieldType::Integer => ("Some(::parquet::basic::LogicalType::Integer { bit_width: 32, is_signed: true })", "INT32"),
+            FieldType::Long => ("Some(::parquet::basic::LogicalType::Integer { bit_width: 64, is_signed: true })", "INT64"),
+            FieldType::Float => (LOGICAL_NONE, "FLOAT"),
+            FieldType::Double => (LOGICAL_NONE, "DOUBLE"),
+            FieldType::String => (LOGICAL_STRING, "BYTE_ARRAY"),
+            FieldType::Boolean => (LOGICAL_NONE, "BOOLEAN"),
+            //Firehose's Hive serializer encodes it as INT96
+            FieldType::TimestampZ => (LOGICAL_NONE, "INT96"),
+            //Encode all arrays/objects as strings
+            FieldType::Array | FieldType::Object | FieldType::Enum => (LOGICAL_STRING, "BYTE_ARRAY"),
+        };
+
+        let repetition = if self.0.typ_flags.is_type_flag(FieldFlag::Optional) {
+            "::parquet::basic::Repetition::OPTIONAL"
+        } else {
+            "::parquet::basic::Repetition::REQUIRED"
+        };
+
+        let name = self.0.table_field_name();
+        fmt.write_fmt(format_args!("::parquet::schema::types::Type::primitive_type_builder(\"{name}\", ::parquet::basic::Type::{physical_type}).with_logical_type({logical_type}).with_repetition({repetition}).build().unwrap().into()"))
+    }
+}
+
 pub fn generate_parquet_writer_interface_code<O: fmt::Write>(
     schema: &TableSchema,
     out: &mut O,
@@ -255,12 +289,19 @@ pub fn generate_parquet_writer_interface_code<O: fmt::Write>(
     }}"#
     )?;
 
+    use crate::TAB;
     //schema
-    writeln!(
-        out,
-        r#"
-    fn schema(&self) -> ::core::result::Result<::parquet::schema::types::TypePtr, ::parquet::errors::ParquetError> {{
-        parquet::schema::parser::parse_message_type({ident}::SHEMA_FIREHOSE_PARQUET_SCHEMA).map(Into::into)
-    }}"#, ident = schema.name.as_str())?;
+    writeln!(out, "{TAB}fn schema(&self) -> ::core::result::Result<::parquet::schema::types::TypePtr, ::parquet::errors::ParquetError> {{")?;
+    writeln!(out, "{TAB}{TAB}let mut fields = Vec::<::parquet::schema::types::TypePtr>::new();\n")?;
+    for field in schema.fields.iter() {
+        if field.typ_flags.is_type_flag(FieldFlag::Index) && !field.typ_flags.is_type_flag(FieldFlag::FirehoseDateIndex) {
+            continue;
+        }
+        writeln!(out, "{TAB}{TAB}//write '{field_name}' column", field_name=field.table_field_name())?;
+        writeln!(out, "{TAB}{TAB}fields.push({});", ParquetFieldSchema(field))?;
+    }
+
+    writeln!(out, "\n{TAB}{TAB}::parquet::schema::types::Type::group_type_builder(\"{name}\").with_fields(fields).build().map(Into::into)", name=schema.lower_cased_table_name())?;
+    writeln!(out, "{TAB}}}")?;
     Ok(())
 }
