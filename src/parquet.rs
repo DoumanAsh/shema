@@ -6,7 +6,7 @@ const TAB: &'static str = "  ";
 impl FieldType {
     #[inline(always)]
     pub fn is_aws_firehose_parquet_utf8_converted(&self) -> bool {
-        matches!(self, FieldType::String | FieldType::Array| FieldType::Object)
+        matches!(self, FieldType::String | FieldType::Array | FieldType::Object | FieldType::Enum)
     }
 
     #[inline(always)]

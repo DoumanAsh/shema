@@ -24,6 +24,8 @@ pub(crate) struct AnalyticsEvent<'a> {
     r#extras: Option<prost_wkt_types::Struct>,
     #[shema(json)]
     r#props: prost_wkt_types::Struct,
+    #[shema(enumeration)]
+    false_enum: prost_wkt_types::Struct,
     r#name: String,
 
     byte: i8,
@@ -52,6 +54,7 @@ fn should_verify_firehose_partition_and_serialization() {
         extras: None,
         props: prost_wkt_types::Struct::new(),
         name: "Whatev".to_owned(),
+        false_enum: prost_wkt_types::Struct::new(),
 
         byte: 1,
         short: 2,
@@ -106,6 +109,7 @@ fn should_verify_derive() {
   REQUIRED BYTE_ARRAY session_id (UTF8);
   OPTIONAL BYTE_ARRAY extra (UTF8);
   REQUIRED BYTE_ARRAY props (UTF8);
+  REQUIRED BYTE_ARRAY false_enum (UTF8);
   REQUIRED BYTE_ARRAY name (UTF8);
   REQUIRED INT32 byte;
   REQUIRED INT32 short;
@@ -177,6 +181,11 @@ fn should_verify_derive() {
     },
     {
       "name": "props",
+      "type": "string",
+      "comment": ""
+    },
+    {
+      "name": "false_enum",
       "type": "string",
       "comment": ""
     },
